@@ -3,7 +3,7 @@
 *the screen reader that actually reads the screen*
 „Was geht ab? — SayWhatsOn sagt's dir."
 
-**An open-source tool for the blind.**
+**An open-source tool for the blind. · Ein Open-Source-Werkzeug für blinde Menschen.**
 
 ---
 
@@ -13,62 +13,213 @@
 
 ## English
 
-SayWhatsOn is a Windows background assistant for blind and eyes-free users. Press a hotkey and it captures your screen together with system and UI context (active window, focus, battery, lock-key states), sends it to a vision-capable AI, and speaks a clear, semantic overview through your existing screen reader.
+SayWhatsOn is a Windows background tool for blind and eyes-free users. Press a
+hotkey and it captures your screen together with system and window context, sends
+it to a vision-capable AI (Google Gemini), and speaks a clear, semantic overview:
+what has the focus, whether a dialog grabbed it, which windows are open — including
+the ones hidden behind others or minimized — and how to navigate.
 
-It does **not** replace your screen reader — it adds a semantic layer on top of it. Where classic screen readers (NVDA, JAWS) walk the UI element tree, SayWhatsOn reads the screen the way a person would, and tells you what's going on.
+It does **not** replace your screen reader. It runs alongside JAWS or NVDA and adds
+a semantic layer on top: where a classic screen reader walks the UI element tree,
+SayWhatsOn reads the screen the way a person would and tells you what's going on.
 
 ### Status
 
-Early stage / work in progress. Image analysis currently runs in the **cloud** (e.g. Google Gemini). A fully **local, offline mode** (via Ollama) is planned. See [`projekt.md`](projekt.md) for the full plan and milestones.
+Runnable **beta**. Milestones 1–3 are done and tested; real focus detection inside
+the active window (milestone 4) is planned. Image analysis runs in the **cloud**
+(Google Gemini). See [`projekt.md`](projekt.md) for the full plan.
 
-### How it works
+### Requirements
 
-1. **Global hotkey** → an instant beep confirms your request was registered.
-2. **Capture** the screen plus system and UI context.
-3. **Send** it to a vision LLM (cloud now, local planned).
-4. **Speak** the result through JAWS, NVDA, or SAPI.
+- **Windows** (uses Windows-only APIs; tested on Windows 11, 64-bit)
+- **Julia** — https://julialang.org/downloads/
+- A **Google Gemini API key** (free tier works for trying it out) —
+  https://aistudio.google.com/apikey
+- A screen reader such as **JAWS** or **NVDA** is recommended, but SayWhatsOn speaks
+  through the built-in Windows voice (SAPI) on its own too.
+
+### Install
+
+```
+git clone https://github.com/UweAlex/saywhatson.git
+cd saywhatson
+julia -e "using Pkg; Pkg.add([\"HTTP\", \"JSON3\"])"
+```
+
+Set your API key. In the **same** terminal you'll run from:
+
+```
+set GEMINI_API_KEY=your_key_here
+```
+
+To keep it permanently, use `setx GEMINI_API_KEY your_key_here` once, then open a
+**new** terminal (setx only affects new windows).
+
+### Run
+
+```
+julia src/saywhatson.jl
+```
+
+Leave that window open — SayWhatsOn runs in the background and listens for the hotkeys.
+
+### Usage
+
+| Key | Action |
+|-----|--------|
+| **Ctrl + Print Screen** | Describe the screen and read it aloud |
+| **Shift + Print Screen** | Open the last description in an editor to read/navigate it; closing it returns you exactly where you were |
+| **Ctrl + C** | Quit |
+
+You'll hear a short beep the instant your request is registered, a second beep when
+the answer is ready, and a low double beep if something went wrong.
+
+### What it tells you
+
+- **Where the focus is** — and a clear warning if a popup or dialog stole it.
+- **Caps Lock** — a warning when it's on, before you type a password in capitals.
+- **Open windows** — named by their real title, including the ones hidden behind
+  others or minimized, which a screenshot alone can never show.
+- **How to navigate** — reliable shortcuts and named regions (e.g. F6 between a
+  browser's main areas), and English on-screen labels left verbatim so you can find them.
+
+### Troubleshooting
+
+- **"RegisterHotKey failed — already taken?"** Another program holds Ctrl+Print
+  Screen. Close it or change the hotkey in the source.
+- **"GEMINI_API_KEY is not set"** The key isn't visible in this terminal. Set it
+  with `set` in the same window, or use `setx` and open a new window.
+- **"The service is overloaded"** A temporary cloud hiccup — just trigger again.
+
+### License
+
+[MIT](LICENSE) — do whatever you want with it, just keep the copyright notice.
+No warranty, no liability.
 
 ### Disclaimer — intended use & limitations
 
 Please read this before using SayWhatsOn.
 
-- **Not a medical device.** SayWhatsOn is a general-purpose information and accessibility tool. It has no medical intended purpose: it does not diagnose, treat, monitor, or prevent anything, and it is **not** a certified assistive, mobility, or safety aid.
-- **No warranty.** The software is provided "as is", without warranty of any kind. You use it entirely at your own risk.
-- **AI can be wrong.** Descriptions are generated by an AI model and may be incomplete, inaccurate, or entirely wrong. **Never** rely on SayWhatsOn as the sole basis for any decision — especially a safety-critical one.
-- **Your data leaves your computer (for now).** In the current cloud mode, screenshots are sent to a third-party AI service for analysis. These images may contain personal or sensitive information. You alone decide what you capture and send. A local mode that keeps everything on your machine is planned.
-
-### License
-
-[MIT](LICENSE) — do whatever you want with it, just keep the copyright notice. No warranty, no liability.
+- **Not a medical device.** SayWhatsOn is a general-purpose information and
+  accessibility tool. It has no medical intended purpose: it does not diagnose, treat,
+  monitor, or prevent anything, and it is **not** a certified assistive, mobility, or
+  safety aid.
+- **No warranty.** The software is provided "as is", without warranty of any kind.
+  You use it entirely at your own risk.
+- **AI can be wrong.** Descriptions are generated by an AI model and may be incomplete,
+  inaccurate, or entirely wrong. **Never** rely on SayWhatsOn as the sole basis for any
+  decision — especially a safety-critical one.
+- **Your data leaves your computer.** Screenshots are sent to a third-party AI service
+  (Google Gemini) for analysis. These images may contain personal or sensitive
+  information. You alone decide what you capture and send.
 
 ---
 
 ## Deutsch
 
-SayWhatsOn ist ein Windows-Hintergrundassistent für blinde und Eyes-free-Nutzer. Du drückst einen Hotkey, und das Tool erfasst deinen Bildschirm zusammen mit System- und UI-Kontext (aktives Fenster, Fokus, Akkustand, Status der Feststelltasten), schickt das an eine bildverstehende KI und spricht einen klaren, semantischen Überblick über deinen vorhandenen Screenreader aus.
+SayWhatsOn ist ein Windows-Hintergrundwerkzeug für blinde und Eyes-free-Nutzer. Du
+drückst einen Hotkey, und es erfasst deinen Bildschirm zusammen mit System- und
+Fensterkontext, schickt das an eine bildverstehende KI (Google Gemini) und spricht
+einen klaren, semantischen Überblick aus: was den Fokus hat, ob ein Dialog ihn an
+sich gerissen hat, welche Fenster offen sind — auch die hinter anderen verdeckten
+oder minimierten — und wie man sich zurechtfindet.
 
-Es **ersetzt** deinen Screenreader nicht — es legt eine semantische Ebene darüber. Wo klassische Screenreader (NVDA, JAWS) den UI-Elementbaum ablaufen, liest SayWhatsOn den Bildschirm so, wie ein Mensch es täte, und sagt dir, was gerade Sache ist.
+Es **ersetzt** deinen Screenreader nicht. Es läuft neben JAWS oder NVDA und legt eine
+semantische Ebene darüber: Wo ein klassischer Screenreader den UI-Elementbaum abläuft,
+liest SayWhatsOn den Bildschirm so, wie ein Mensch es täte, und sagt dir, was Sache ist.
 
 ### Status
 
-Frühes Stadium / in Arbeit. Die Bildauswertung läuft derzeit in der **Cloud** (z. B. Google Gemini). Ein vollständig **lokaler Offline-Modus** (über Ollama) ist geplant. Den kompletten Plan samt Meilensteinen findest du in [`projekt.md`](projekt.md).
+Lauffähige **Beta**. Meilensteine 1 bis 3 sind umgesetzt und getestet; der echte
+Fokus innerhalb des aktiven Fensters (Meilenstein 4) ist geplant. Die Bildauswertung
+läuft in der **Cloud** (Google Gemini). Den vollen Plan findest du in [`projekt.md`](projekt.md).
 
-### Funktionsweise
+### Voraussetzungen
 
-1. **Globaler Hotkey** → ein sofortiger Piepton bestätigt, dass deine Anfrage angekommen ist.
-2. **Erfassen** des Bildschirms plus System- und UI-Kontext.
-3. **Senden** an ein Vision-LLM (Cloud jetzt, lokal geplant).
-4. **Sprechen** des Ergebnisses über JAWS, NVDA oder SAPI.
+- **Windows** (nutzt Windows-eigene Schnittstellen; getestet auf Windows 11, 64-Bit)
+- **Julia** — https://julialang.org/downloads/
+- Ein **Google-Gemini-API-Schlüssel** (zum Ausprobieren reicht der Gratis-Tarif) —
+  https://aistudio.google.com/apikey
+- Ein Screenreader wie **JAWS** oder **NVDA** ist empfohlen, aber SayWhatsOn spricht
+  auch eigenständig über die windows-eigene Stimme (SAPI).
 
-### Haftungsausschluss — Verwendungszweck & Grenzen
+### Installation
 
-Bitte vor der Nutzung von SayWhatsOn lesen.
+```
+git clone https://github.com/UweAlex/saywhatson.git
+cd saywhatson
+julia -e "using Pkg; Pkg.add([\"HTTP\", \"JSON3\"])"
+```
 
-- **Kein Medizinprodukt.** SayWhatsOn ist ein allgemeines Informations- und Zugänglichkeitswerkzeug. Es hat keinen medizinischen Verwendungszweck: Es diagnostiziert, behandelt, überwacht oder verhindert nichts und ist **kein** zertifiziertes Hilfs-, Mobilitäts- oder Sicherheitsmittel.
-- **Keine Gewähr.** Die Software wird „wie besehen" bereitgestellt, ohne jegliche Gewährleistung. Die Nutzung erfolgt vollständig auf eigenes Risiko.
-- **KI kann irren.** Die Beschreibungen werden von einem KI-Modell erzeugt und können unvollständig, ungenau oder völlig falsch sein. Verlasse dich **niemals** allein auf SayWhatsOn als Grundlage für eine Entscheidung — schon gar nicht für eine sicherheitskritische.
-- **Deine Daten verlassen (vorerst) deinen Rechner.** Im aktuellen Cloud-Modus werden Screenshots zur Analyse an einen Drittanbieter-KI-Dienst gesendet. Diese Bilder können personenbezogene oder sensible Informationen enthalten. Du allein entscheidest, was du erfasst und sendest. Ein lokaler Modus, bei dem alles auf deinem Rechner bleibt, ist geplant.
+Setze deinen API-Schlüssel — im **selben** Fenster, aus dem du startest:
+
+```
+set GEMINI_API_KEY=dein_schluessel
+```
+
+Dauerhaft: einmal `setx GEMINI_API_KEY dein_schluessel`, danach ein **neues** Fenster
+öffnen (setx wirkt nur in neuen Fenstern).
+
+### Starten
+
+```
+julia src/saywhatson.jl
+```
+
+Lass das Fenster offen — SayWhatsOn läuft im Hintergrund und wartet auf die Hotkeys.
+
+### Bedienung
+
+| Taste | Wirkung |
+|-------|---------|
+| **Strg + Druck** | Bildschirm beschreiben und vorlesen |
+| **Umschalt + Druck** | Letzte Beschreibung im Editor öffnen zum Lesen/Navigieren; beim Schließen springt der Fokus exakt zurück |
+| **Strg + C** | Beenden |
+
+Ein kurzer Piepton bestätigt sofort, dass deine Anfrage angekommen ist, ein zweiter
+Ton kündigt die Antwort an, ein tiefer Doppelton meldet einen Fehler.
+
+### Was es dir sagt
+
+- **Wo der Fokus ist** — und eine klare Warnung, wenn ein Pop-up oder Dialog ihn
+  an sich gerissen hat.
+- **Feststelltaste** — eine Warnung, wenn sie an ist, bevor du ein Passwort in
+  Großbuchstaben tippst.
+- **Offene Fenster** — mit ihrem echten Titel benannt, auch die hinter anderen
+  verdeckten oder minimierten, die ein Screenshot allein nie zeigen kann.
+- **Wie du navigierst** — verlässliche Tastenkürzel und benannte Bereiche (z. B. F6
+  zwischen den Hauptbereichen eines Browsers), englische Beschriftungen wörtlich, damit
+  du sie wiederfindest.
+
+### Wenn etwas klemmt
+
+- **„RegisterHotKey fehlgeschlagen — schon belegt?"** Ein anderes Programm hält
+  Strg+Druck. Schließe es oder ändere den Hotkey im Quelltext.
+- **„GEMINI_API_KEY ist nicht gesetzt"** Der Schlüssel ist in diesem Fenster nicht
+  sichtbar. Mit `set` im selben Fenster setzen oder `setx` nutzen und ein neues Fenster öffnen.
+- **„Der Dienst ist überlastet"** Ein vorübergehender Cloud-Schluckauf — einfach
+  noch einmal auslösen.
 
 ### Lizenz
 
-[MIT](LICENSE) — mach damit, was du willst, behalte nur den Copyright-Hinweis. Keine Gewähr, keine Haftung.
+[MIT](LICENSE) — mach damit, was du willst, behalte nur den Copyright-Hinweis.
+Keine Gewähr, keine Haftung.
+
+### Haftungsausschluss — Verwendungszweck & Grenzen
+
+Bitte vor der Nutzung lesen.
+
+- **Kein Medizinprodukt.** SayWhatsOn ist ein allgemeines Informations- und
+  Zugänglichkeitswerkzeug. Es hat keinen medizinischen Verwendungszweck: Es
+  diagnostiziert, behandelt, überwacht oder verhindert nichts und ist **kein**
+  zertifiziertes Hilfs-, Mobilitäts- oder Sicherheitsmittel.
+- **Keine Gewähr.** Die Software wird „wie besehen" bereitgestellt, ohne jegliche
+  Gewährleistung. Die Nutzung erfolgt vollständig auf eigenes Risiko.
+- **KI kann irren.** Die Beschreibungen werden von einem KI-Modell erzeugt und können
+  unvollständig, ungenau oder völlig falsch sein. Verlasse dich **niemals** allein auf
+  SayWhatsOn als Grundlage für eine Entscheidung — schon gar nicht für eine
+  sicherheitskritische.
+- **Deine Daten verlassen deinen Rechner.** Screenshots werden zur Analyse an einen
+  Drittanbieter-KI-Dienst (Google Gemini) gesendet. Diese Bilder können
+  personenbezogene oder sensible Informationen enthalten. Du allein entscheidest, was
+  du erfasst und sendest.
