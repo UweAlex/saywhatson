@@ -1,4 +1,183 @@
-# Projekt: Kontextbewusster Windows-Orientierungsassistent
+# SayWhatsOn — Projektplan
+
+*the screen reader that actually reads the screen*
+„Was geht ab? — SayWhatsOn sagt's dir."
+
+SayWhatsOn ist ein lokales Windows-Hintergrundwerkzeug, das den Bildschirm samt
+System- und Fensterkontext erfasst, an ein bildverstehendes Sprachmodell schickt
+und das Ergebnis als gesprochene Orientierungshilfe ausgibt. Es ersetzt keinen
+Screenreader, sondern legt eine semantische Ebene darüber.
+
+**Stand:** lauffähige Beta. Meilensteine 1 bis 3 sind umgesetzt und getestet,
+Meilenstein 4 ist geplant. Bildauswertung über Google Gemini (Cloud).
+
+---
+
+## 1. Projektziel
+
+Ein Werkzeug, das auf Knopfdruck einen semantischen Gesamtüberblick darüber gibt,
+„was gerade auf dem Bildschirm los ist" — wohin der Fokus geht, ob ein Dialog die
+Eingabe an sich gerissen hat, welche Fenster offen sind (auch verdeckte und
+minimierte) und wie man sich zurechtfindet. Das ist etwas, das klassische
+Screenreader strukturell nicht leisten: Sie lesen den UI-Baum vor, geben aber
+keinen menschlich gedachten Überblick über die Situation.
+
+Zielgruppe sind blinde und stark sehbehinderte Nutzer. Entstanden ist das Projekt
+aus dem konkreten Bedarf, der blinden Mutter des Autors eine schnelle Orientierung
+zu geben, wenn sie sich auf dem Bildschirm nicht mehr sicher ist.
+
+## 2. Architekturprinzipien
+
+* **KISS:** Vorhandene Windows-Schnittstellen nutzen statt das Rad neu zu erfinden.
+  Keine tiefen C++-Hacks.
+* **Minimal invasiv:** reiner Hintergrundprozess (Standalone), der sich nicht in
+  fremde Software einklinkt, sondern den Bildschirm von außen erfasst und über die
+  windows-eigene Sprachausgabe spricht — friedlich neben dem laufenden Screenreader.
+* **Separation of Concerns:** Kernlogik (Julia) ist getrennt von Bildauswertung
+  (austauschbares Backend, Strategy-Pattern) und Ausgabe (Konsole + Sprache).
+* **Modell entscheidet, Code sammelt:** Nicht-sichtbare Fakten (Tastaturzustände,
+  Akku, Fensterliste) werden über flache Win32-Aufrufe roh gesammelt und dem Modell
+  als Kontext mitgegeben. *Was* davon erwähnenswert ist, entscheidet das Modell per
+  Prompt-Regel — nicht starre if-Abfragen im Code.
+* **Latenztoleranz als Designvorteil:** Der Nutzer fragt bewusst und auf Abruf an.
+  Antwortzeiten von einigen Sekunden sind in Ordnung. Wichtig ist eine *sofortige
+  akustische Quittung*, dass die Anfrage angekommen ist (siehe Abschnitt 6).
+
+## 3. Technischer Stack
+
+* **Kernlogik:** Julia
+* **API-Kommunikation:** `HTTP.jl`, `JSON3.jl`, `Base64`
+* **System-Interop, zwei Klassen:**
+  * *Flache Win32-Aufrufe* (elegant und KISS-konform via `ccall`): globale Hotkeys
+    (`RegisterHotKey`), Tastaturzustände (`GetKeyState`), Akku (`GetSystemPowerStatus`),
+    Internet (`InternetGetConnectedState`), Fensteraufzählung (`GetTopWindow`,
+    `GetWindow`, `GetWindowTextW`, `IsIconic`, `DwmGetWindowAttribute`), Fokusrückgabe
+    (`GetForegroundWindow`, `AttachThreadInput`, `SetForegroundWindow`), Pieptöne (`Beep`).
+  * *COM-/.NET-Dinge* (Screenshot, Sprachausgabe, Editorfenster): In Julia kein
+    nativer Weg. Gelöst über kurze **PowerShell-Aufrufe** (`System.Drawing` für den
+    Screenshot, `System.Speech` für SAPI). Beim großzügigen Zeitbudget sind die kurzen
+    Prozessstarts unkritisch.
+* **Bildauswertung (Backend, austauschbar via Strategy-Pattern):**
+  * *Cloud (aktiv):* Google **Gemini** (`gemini-2.5-flash`), Bild als Base64 + Textprompt
+    über `HTTP.jl`. API-Schlüssel aus der Umgebungsvariable `GEMINI_API_KEY`
+    (alternativ `GOOGLE_API_KEY`).
+  * *Lokal (vorhanden, aber ruhend):* ein `OllamaBackend` existiert im Code und
+    dokumentiert die Austauschbarkeit. Bewusst nicht aktiv — siehe Abschnitt 7.
+
+## 4. Abgrenzung zu bestehenden Lösungen
+
+* **Be My Eyes / „Be My AI" und ähnliche Cloud-Bildbeschreibung:** liefern eine
+  gesprochene Beschreibung eines Bildes. Genau das leistet SayWhatsOn nach den
+  Meilensteinen 1 und 2 auch. Der eigentliche Mehrwert beginnt ab Meilenstein 3:
+  die Anreicherung mit System- und Fensterkontext und die auf *Orientierung und
+  Navigation* ausgerichtete Antwort statt einer neutralen Bildunterschrift.
+* **Klassische Screenreader (JAWS, NVDA):** lesen den strukturellen UI-Baum vor,
+  geben aber keinen semantischen Gesamtüberblick. SayWhatsOn ersetzt sie nicht,
+  sondern ist eine Meta-Ebene darüber und läuft parallel zu ihnen.
+
+---
+
+## 5. Meilensteine
+
+### Meilenstein 1 — Visuelle Pipeline ✅ umgesetzt
+* Globaler Hotkey **Strg+Druck** (`RegisterHotKey` auf Strg + Druck-Taste), der die
+  Taste konsumiert, damit sie nicht zusätzlich an die App durchgereicht wird.
+* **Sofortiger Piepton** als allererste Aktion, bevor Screenshot und Netzaufruf starten.
+* Vollbild-Screenshot direkt über PowerShell (`CopyFromScreen`), kein Umweg über die
+  Zwischenablage.
+* Senden als Base64-Bild an Gemini mit Orientierungs-Prompt; Ausgabe in der Konsole.
+* Backend-Abstraktion `beschreibe_bild(backend, png, kontext)` von Anfang an (Strategy-Pattern).
+
+### Meilenstein 2 — Sprachausgabe & Navigieren in der Ausgabe ✅ umgesetzt
+* **Sprachausgabe** über die windows-eigene SAPI (`System.Speech`), etwas langsamer
+  für bessere Verständlichkeit. `clean_for_speech` entfernt Markdown, schreibt
+  Einheiten aus und macht den Text vorlesefreundlich. Die SAPI-Stimme läuft friedlich
+  neben dem Screenreader; eine COM-Anbindung an die JAWS-/NVDA-Sprachwarteschlange war
+  ursprünglich geplant, wurde aber zugunsten der einfacheren SAPI-Lösung verworfen,
+  die die Zielnutzerin gut versteht.
+* **Navigieren in der Ausgabe:** Zweiter Hotkey **Umschalt+Druck** öffnet die letzte
+  Beschreibung in Notepad. Dort kann sie mit dem Screenreader (JAWS) zeilen-, wort-
+  und buchstabenweise durchgegangen werden — wichtig etwa, um englische Beschriftungen
+  sicher mitzubekommen. Beim Schließen springt der Fokus exakt ins Ausgangsfenster
+  zurück (`GetForegroundWindow` gemerkt, danach `AttachThreadInput` + `SetForegroundWindow`).
+
+> **⭐ Mit Abschluss von Meilenstein 2 ist der Funktionsumfang bestehender
+> KI-Bildbeschreibungen erreicht:** Hotkey drücken, sofortige Quittung hören,
+> gesprochene Beschreibung des Bildschirms bekommen, in Ruhe nachlesen. Alles ab
+> Meilenstein 3 geht darüber hinaus.
+
+### Meilenstein 3 — System- & Fensterkontext ✅ umgesetzt
+* **Systemstatus** über flache Win32-Aufrufe: Feststelltaste und Nummernblock
+  (`GetKeyState`), Akku (`GetSystemPowerStatus`), Internetverbindung
+  (`InternetGetConnectedState`). Wichtigster Nutzen: eine **Warnung bei
+  eingeschalteter Feststelltaste**, bevor versehentlich in Großbuchstaben getippt wird.
+* **Fensterliste** über die Z-Reihenfolge (`GetTopWindow` + `GetWindow`): alle offenen
+  Anwendungsfenster mit echtem Titel, samt Vermerk, welches im Vordergrund, welche
+  minimiert und welche verdeckt sind. So erfährt der Nutzer auch von Fenstern, die
+  im Bild gar nicht sichtbar sind. Desktop/Shell und „cloaked" Phantom-Fenster werden
+  herausgefiltert (`DwmGetWindowAttribute`).
+* Beides geht als beschrifteter Kontextblock an das Modell. Eine Prompt-Regel weist es
+  an, nur das Relevante zu erwähnen (Feststelltaste-Warnung, verdeckte Fenster nur
+  benennen) und über den Inhalt verdeckter Fenster nichts zu erfinden.
+* Anders als ursprünglich geplant **einstufig** statt zweistufig: Die LLM-Antwort kommt
+  schnell genug, und eine einzige zusammenhängende gesprochene Antwort ist klarer als
+  zwei getrennte Ausgaben.
+
+### Meilenstein 4 — Echter UI-Fokus im Fenster 🔜 geplant
+* Bisher weiß SayWhatsOn, *welches* Fenster vorn ist. M4 soll verraten, *welches
+  Bedienelement* (Knopf, Eingabefeld, Listeneintrag) innerhalb des Fensters gerade
+  den Tastaturfokus hat — der Schritt von „gut beschrieben" zu „faktisch korrekt,
+  wohin der nächste Tastendruck geht".
+* Weg: `UIAutomationCore` (COM). Das ist der bekannte Reibungspunkt in Julia und wird
+  daher bewusst und nicht nebenbei angegangen.
+
+---
+
+## 6. Akustisches Feedback (Pieptöne)
+
+Direkte Rückmeldung über kurze Töne statt Worte — sofort verfügbar, belegt den
+Sprachkanal nicht, kollidiert nicht mit dem Screenreader. Umgesetzt über
+`kernel32::Beep` (`ccall`, kein COM). Drei Töne:
+* **Start:** „Anfrage verstanden, arbeite." (erste Aktion im Hotkey-Handler)
+* **Fertig:** höher, kündigt die Ausgabe an.
+* **Fehler:** tief und doppelt, klar negativ.
+
+## 7. Datenschutz & Cloud-Entscheidung
+
+Im aktiven Cloud-Modus werden Screenshots zur Auswertung an Google Gemini gesendet.
+Auf dem Bildschirm einer blinden Person können sensible Inhalte stehen (offene Mails,
+Namen, sichtbare Passwörter), ohne dass sie es bemerkt. Das ist im Haftungsausschluss
+(README) klar benannt, damit jeder Nutzer bewusst entscheidet, was er erfasst.
+
+Ein lokaler Pfad (Ollama mit Vision-Modell) wäre datenschutzfreundlicher und ist im
+Code als ruhendes Backend vorhanden. Bewusst nicht aktiviert, weil lokale Vision-Modelle
+Gemini in Beschreibungsqualität deutlich nachstehen und auf einem Laptop einen großen
+Ressourcen- und Geschwindigkeitsnachteil bedeuten. Für ein Werkzeug, das schnell und
+verlässlich beschreiben soll, ist die Cloud derzeit die bessere Wahl. Die Tür bleibt
+offen, falls lokale Modelle künftig aufholen.
+
+## 8. Backlog (mögliche Zukunfts-Features)
+
+Nicht Teil der Kern-Meilensteine, aber sinnvolle Ergänzungen:
+* **Frage-Antwort-Modus:** Folgefrage zum selben Screenshot ohne neue Aufnahme.
+* **Sprechen abbrechen:** Hotkey, um eine laufende lange Ausgabe zu stoppen.
+* **Korrekte englische Aussprache** (SSML mit englischer Stimme) — durch das
+  Buchstabieren im Editor derzeit eher Komfort als Notwendigkeit.
+* **Nur aktives Fenster erfassen** statt des ganzen Bildschirms — weniger Daten,
+  weniger Datenschutzrisiko.
+* **Konfigurierbarer Hotkey** und konfigurierbare Tonsignale.
+* **Sensitivitätsfilter:** Warnung vor dem Versand, wenn z. B. ein Passwortfeld erkannt wird.
+
+## 9. Getroffene Entscheidungen
+
+* **Name:** SayWhatsOn.
+* **Lizenz:** MIT (Haftungsausschluss reicht, ansonsten maximale Wiederverwendbarkeit).
+* **Hotkeys:** Strg+Druck (beschreiben) und Umschalt+Druck (im Editor lesen). Die
+  Druck-Taste kollidiert nicht mit JAWS-/NVDA-Belegungen; SayWhatsOn konsumiert sie.
+* **Backend:** Cloud (Gemini) aktiv, lokal (Ollama) ruhend.
+* **Sprache Julia:** bewusst gewählt; die COM-Schicht bleibt der Reibungspunkt. Sollte
+  die COM-Anbindung in M4 zu aufwendig werden, ist C# (native COM/UIAutomation) als
+  Alternative zu evaluieren.# Projekt: Kontextbewusster Windows-Orientierungsassistent
 
 ## 1. Projektziel
 Entwicklung eines lokalen, datenschutzfreundlichen Hintergrunddienstes, der visuelle Bildschirminformationen (Zwischenablage/Screenshots) mit dem aktuellen System- und UI-Kontext kombiniert. Diese aggregierten Daten werden an ein Vision-fähiges Large Language Model (LLM) gesendet, um eine präzise, situationsbezogene Orientierungshilfe zu generieren. Die Audioausgabe erfolgt minimal invasiv über bestehende Screenreader-Software, um Audio-Interferenzen zu vermeiden.
