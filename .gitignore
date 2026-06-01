@@ -1,0 +1,26 @@
+# Geheimnisse — niemals committen
+*.key
+.env
+.env.*
+secrets*
+*apikey*
+*api_key*
+
+# SayWhatsOn temporaere Dateien (liegen normalerweise im Temp-Ordner,
+# hier zur Sicherheit, falls aus dem Repo-Ordner heraus gestartet)
+saywhatson_*.png
+saywhatson_*.txt
+
+# Julia
+Manifest.toml
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+/deps/deps.jl
+
+# Editoren / Betriebssystem
+.vscode/
+.idea/
+*~
+Thumbs.db
+desktop.ini
